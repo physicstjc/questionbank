@@ -1,1 +1,59 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>6091 Physics Question Bank</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <main class="app-shell">
+      <aside class="sidebar">
+        <header class="brand">
+          <p class="eyebrow">6091 Physics</p>
+          <h1>Question Bank</h1>
+          <p id="stats">Loading classified questions...</p>
+        </header>
 
+        <section class="filters" aria-label="Question filters">
+          <label>
+            Topic
+            <select id="topicFilter">
+              <option value="">All topics</option>
+            </select>
+          </label>
+          <label>
+            Learning outcome
+            <select id="loFilter">
+              <option value="">All learning outcomes</option>
+            </select>
+          </label>
+          <label>
+            Search
+            <input id="searchInput" type="search" placeholder="Keyword, school, paper...">
+          </label>
+        </section>
+
+        <section class="result-meta">
+          <strong id="resultCount">0 questions</strong>
+          <span id="activeClass">Choose a question to preview it in the PDF.</span>
+        </section>
+
+        <div id="questionList" class="question-list" aria-live="polite"></div>
+      </aside>
+
+      <section class="viewer-pane">
+        <div class="viewer-toolbar">
+          <div>
+            <strong id="viewerTitle">No question selected</strong>
+            <span id="viewerSubtitle">The source PDF will open here.</span>
+          </div>
+          <a id="openPdf" href="#" target="_blank" rel="noreferrer" aria-disabled="true">Open PDF</a>
+        </div>
+        <iframe id="pdfFrame" title="Question PDF preview"></iframe>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>
