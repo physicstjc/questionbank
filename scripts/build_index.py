@@ -101,6 +101,13 @@ STOPWORDS = {
     "diagram", "diagrams", "table", "tables", "data", "marks", "mark",
 }
 
+COMMAND_WORDS = {
+    "calculate", "compare", "define", "describe", "deduce", "determine",
+    "discuss", "estimate", "evaluate", "explain", "identify", "interpret",
+    "investigate", "list", "outline", "predict", "recall", "recognise",
+    "show", "sketch", "state", "suggest",
+}
+
 QUESTION_START_RE = re.compile(r"^\s*(\d{1,2})\s+(?=[A-Z0-9(])")
 PAGE_NO_RE = re.compile(r"^\s*\d{1,3}\s*$")
 ADMIN_LINE_RE = re.compile(
@@ -182,6 +189,25 @@ def tokenize(text):
     text = text.replace("e.m.f", "emf").replace("p.d", "pd").replace("d.c", "dc")
     tokens = re.findall(r"[a-z][a-z0-9]+|[αβγµλρΩΩ]", text)
     return [token for token in tokens if token not in STOPWORDS and len(token) > 1]
+
+
+def content_tokens(text):
+    return [token for token in tokenize(text) if token not in COMMAND_WORDS]
+
+
+def command_tokens(text):
+    return {token for token in tokenize(text) if token in COMMAND_WORDS}
+
+
+def key_phrases(text, min_size=2, max_size=4):
+    tokens = content_tokens(text)
+    phrases = set()
+    for size in range(min_size, max_size + 1):
+        for index in range(0, len(tokens) - size + 1):
+            phrase = " ".join(tokens[index:index + size])
+            if phrase:
+                phrases.add(phrase)
+    return phrases
 
 
 def subject_content_lines(syllabus_pdf):
@@ -402,17 +428,30 @@ def build_topic_models(topics, topic_keywords):
     models = []
     all_docs = []
     for topic in topics:
-        topic_doc = " ".join([topic["title"], *topic["content"], topic_keywords.get(topic["number"], "")])
-        lo_docs = []
+        topic_core_doc = " ".join([topic["title"], *topic["content"]])
+        topic_keyword_doc = topic_keywords.get(topic["number"], "")
+        lo_models = []
         for lo in topic["learningOutcomes"]:
             lo_doc = " ".join([
-                topic_doc,
+                topic_core_doc,
                 lo.get("subtopicTitle") or "",
                 lo["statement"],
             ])
-            lo_docs.append((lo, Counter(tokenize(lo_doc))))
-            all_docs.append(set(tokenize(lo_doc)))
-        models.append((topic, Counter(tokenize(topic_doc)), lo_docs))
+            lo_models.append({
+                "lo": lo,
+                "tokens": Counter(content_tokens(lo_doc)),
+                "concepts": set(content_tokens(lo_doc)),
+                "phrases": key_phrases(" ".join([lo.get("subtopicTitle") or "", lo["statement"]])),
+                "commands": command_tokens(lo["statement"]),
+            })
+            all_docs.append(set(content_tokens(lo_doc)))
+        models.append({
+            "topic": topic,
+            "topicTokens": Counter(content_tokens(topic_core_doc)),
+            "topicKeywords": Counter(content_tokens(topic_keyword_doc)),
+            "topicPhrases": key_phrases(topic_core_doc),
+            "loModels": lo_models,
+        })
 
     df = Counter()
     for doc_tokens in all_docs:
@@ -434,62 +473,82 @@ def weighted_overlap(question_tokens, model_tokens, idf):
     return score
 
 
-def forced_physics_topic_number(text):
+def concept_coverage(question_concepts, model_concepts):
+    if not question_concepts or not model_concepts:
+        return 0.0
+    shared = question_concepts & model_concepts
+    return len(shared) / math.sqrt(len(model_concepts))
+
+
+def phrase_overlap(text, phrases):
+    if not text or not phrases:
+        return 0.0
     lower = text.lower()
-    rules = [
-        (20, r"\b(radioactive|radioactivity|half[- ]life|isotope|isotopes|nuclide|alpha|beta|gamma|background radiation|nuclear fission|nuclear fusion)\b"),
-        (16, r"\b(mains plug|live wire|neutral wire|earth wire|earthing|fuse|fuses|circuit breaker|damaged insulation|double insulation|kwh|kw h|kilowatt)\b"),
-        (4, r"\b(moment|moments|pivot|clockwise|anticlockwise|principle of moments|centre of gravity|scaffold|uniform rod|uniform beam)\b"),
-        (15, r"\b(series circuit|parallel circuit|potential divider|potentiometer|thermistor|light-dependent resistor|ldr|effective resistance)\b"),
-        (12, r"\b(refraction|reflection|refractive index|critical angle|total internal reflection|converging lens|focal length|ray diagram|plane mirror)\b"),
-        (19, r"\b(transformer|generator|electromagnetic induction|induced e\.?m\.?f|faraday|lenz|slip rings|primary coil|secondary coil)\b"),
-    ]
-    for topic_number, pattern in rules:
-        if re.search(pattern, lower):
-            return topic_number
-    return None
+    hits = sum(1 for phrase in phrases if phrase in lower)
+    return hits / math.sqrt(len(phrases))
 
 
-def classify_question(text, models, idf, subject_key, topic_keywords):
-    tokens = tokenize(text)
-    best_topic = None
-    best_topic_score = 0.0
-    forced_topic = forced_physics_topic_number(text) if subject_key == "physics" else None
+def command_overlap(question_commands, model_commands):
+    if not question_commands or not model_commands:
+        return 0.0
+    return len(question_commands & model_commands) / len(model_commands)
 
-    for topic, topic_tokens, lo_docs in models:
-        if forced_topic and topic["number"] != forced_topic:
-            continue
-        keyword_tokens = Counter(tokenize(topic_keywords.get(topic["number"], "")))
-        topic_score = weighted_overlap(tokens, topic_tokens, idf) + weighted_overlap(tokens, keyword_tokens, idf) * 2.8
-        if topic_score > best_topic_score:
-            best_topic_score = topic_score
-            best_topic = (topic, lo_docs)
 
-    best_lo = None
-    best_lo_score = 0.0
-    if best_topic:
-        topic, lo_docs = best_topic
-        for lo, lo_tokens in lo_docs:
-            lo_score = weighted_overlap(tokens, lo_tokens, idf)
-            if lo_score > best_lo_score:
-                best_lo_score = lo_score
-                best_lo = lo
+def classify_question(text, models, idf):
+    tokens = content_tokens(text)
+    concepts = set(tokens)
+    commands = command_tokens(text)
+    lower_text = text.lower()
 
-    confidence = min(0.98, (best_topic_score + best_lo_score) / 24) if best_topic_score else 0.0
-    if confidence < 0.10:
+    best = None
+    second_score = 0.0
+
+    for model in models:
+        topic = model["topic"]
+        topic_score = weighted_overlap(tokens, model["topicTokens"], idf)
+        topic_score += phrase_overlap(lower_text, model["topicPhrases"]) * 4.0
+        topic_score += weighted_overlap(tokens, model["topicKeywords"], idf) * 0.12
+
+        for lo_model in model["loModels"]:
+            lo = lo_model["lo"]
+            lo_score = weighted_overlap(tokens, lo_model["tokens"], idf)
+            lo_score += concept_coverage(concepts, lo_model["concepts"]) * 5.5
+            lo_score += phrase_overlap(lower_text, lo_model["phrases"]) * 7.0
+            lo_score += command_overlap(commands, lo_model["commands"]) * 3.0
+            score = lo_score * 0.72 + topic_score * 0.28
+            candidate = {
+                "topic": topic,
+                "lo": lo,
+                "score": score,
+                "topicScore": topic_score,
+                "loScore": lo_score,
+            }
+            if best is None or score > best["score"]:
+                if best is not None:
+                    second_score = best["score"]
+                best = candidate
+            elif score > second_score:
+                second_score = score
+
+    if best is None:
         return {
             "topicNumber": None,
             "topicTitle": "Unclassified",
             "learningOutcomeCode": None,
             "learningOutcome": "Needs review",
-            "confidence": round(confidence, 2),
+            "confidence": 0.0,
         }
+
+    margin = best["score"] - second_score
+    confidence = min(0.98, (best["score"] / 22) * min(1.0, 0.65 + margin / 8))
+    topic = best["topic"]
+    best_lo = best["lo"]
 
     return {
         "topicNumber": topic["number"],
         "topicTitle": topic["title"],
-        "learningOutcomeCode": best_lo["code"] if best_lo else None,
-        "learningOutcome": best_lo["statement"] if best_lo else "Needs review",
+        "learningOutcomeCode": best_lo["code"],
+        "learningOutcome": best_lo["statement"],
         "confidence": round(confidence, 2),
     }
 
@@ -544,7 +603,7 @@ def build_subject(subject_key):
             text = extract_question_text(page_texts, start, end)
             if len(text) < 24:
                 continue
-            classification = classify_question(text[:650], models, idf, subject_key, topic_keywords)
+            classification = classify_question(text, models, idf)
             rel_path = str(pdf_path.relative_to(ROOT))
             questions.append({
                 "id": f"q{len(questions) + 1}",
