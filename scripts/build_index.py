@@ -110,6 +110,8 @@ COMMAND_WORDS = {
 
 QUESTION_START_RE = re.compile(r"^\s*(\d{1,2})\s+(?=[A-Z0-9(])")
 PAGE_NO_RE = re.compile(r"^\s*\d{1,3}\s*$")
+ANSWER_NAME_RE = re.compile(r"\b(ms|mark\s*scheme|marking\s*scheme|answer|answers|ans|solution|solutions|key)\b", re.I)
+QUESTION_NAME_RE = re.compile(r"\b(qp|question|questions|question\s*paper|with\s+ms|with\s+answers?|and\s+ans|and\s+answers?|qp\s*\+\s*ms|qp\s+and\s+ans)\b", re.I)
 ADMIN_LINE_RE = re.compile(
     r"("
     r"turn over|"
@@ -553,17 +555,52 @@ def classify_question(text, models, idf):
     }
 
 
+def filename_text(path):
+    return re.sub(r"[_\-\[\]().]+", " ", path.name.lower())
+
+
 def paper_kind(path):
-    name = path.name.lower()
-    if re.search(r"\b(ms|mark|answer|ans|solution|solutions|key)\b", name):
-        return "Answer / marking scheme"
+    name = filename_text(path)
     if re.search(r"\bp1\b|paper 1|prelim_p1|phy_p1|chem_p1|bio_p1", name):
         return "Paper 1"
     if re.search(r"\bp2\b|paper 2|prelim_p2|phy_p2|chem_p2|bio_p2", name):
         return "Paper 2"
     if re.search(r"\bp3\b|paper 3|pract|preplist|prep list", name):
         return "Paper 3"
+    if ANSWER_NAME_RE.search(name):
+        return "Answer / marking scheme"
     return "Question paper"
+
+
+def paper_code(path):
+    name = filename_text(path)
+    codes = []
+    if re.search(r"\bp1\b|paper 1|prelim_p1|phy_p1|chem_p1|bio_p1", name):
+        codes.append("p1")
+    if re.search(r"\bp2\b|paper 2|prelim_p2|phy_p2|chem_p2|bio_p2", name):
+        codes.append("p2")
+    if re.search(r"\bp3\b|paper 3|pract|preplist|prep list", name):
+        codes.append("p3")
+    return "+".join(codes) if codes else "paper"
+
+
+def document_role(path):
+    name = filename_text(path)
+    has_answer = bool(ANSWER_NAME_RE.search(name))
+    has_question = bool(QUESTION_NAME_RE.search(name)) or " wo ans" in name or "without ans" in name
+    if has_answer and has_question:
+        return "mixed"
+    if has_answer:
+        return "answer"
+    return "question"
+
+
+def answer_section_start_page(doc):
+    for page_index, page in enumerate(doc):
+        text = normalize_text(page.get_text())
+        if re.search(r"\b(question\s+answer\s+marks|mark(?:ing)?\s+scheme|suggested\s+answers?|answer\s+scheme|solutions?)\b", text, re.I):
+            return page_index
+    return None
 
 
 def school_name(path):
@@ -591,12 +628,101 @@ def school_name(path):
     return stem or path.stem
 
 
+def answer_match_keys(path):
+    year = path.parts[-2] if path.parent != ROOT else ""
+    code = paper_code(path)
+    codes = [code]
+    if "+" in code:
+        codes.extend(code.split("+"))
+    codes.append("paper")
+    keys = []
+    for school in school_key_variants(path):
+        keys.extend((school, year, item) for item in codes)
+    return keys
+
+
+def school_key_variants(path):
+    raw = normalize_text(school_name(path)).lower()
+    simplified = re.sub(
+        r"\b(prelims?|preliminary|s4sip|sip|g3|secondary|school|sec)\b",
+        " ",
+        raw,
+    )
+    simplified = normalize_text(simplified)
+    variants = [raw]
+    if simplified and simplified != raw:
+        variants.append(simplified)
+
+    words = re.findall(r"[a-z0-9]+", raw)
+    if len(words) > 1:
+        acronym = "".join(word[0] for word in words if not word.isdigit())
+        if acronym and acronym not in variants:
+            variants.append(acronym)
+
+    return variants
+
+
 def pdf_paths_for(config):
     paths = []
     for pdf_dir in config["pdf_dirs"]:
         if pdf_dir.exists():
             paths.extend(pdf_dir.glob("**/*.pdf"))
     return sorted(path for path in paths if path.resolve() != config["syllabus"].resolve())
+
+
+def answer_reference(pdf_path, start=None):
+    ref = {
+        "answerFile": str(pdf_path.relative_to(ROOT)),
+        "answerFileName": pdf_path.name,
+        "answerPage": 1,
+        "answerY": 0,
+    }
+    if start:
+        ref["answerPage"] = start["page"]
+        ref["answerY"] = start["y"]
+    return ref
+
+
+def build_answer_index(pdf_paths):
+    exact = {}
+    fallback = {}
+
+    for pdf_path in pdf_paths:
+        role = document_role(pdf_path)
+        if role == "question":
+            continue
+
+        try:
+            doc = fitz.open(pdf_path)
+        except Exception:
+            continue
+
+        boundary = 0 if role == "answer" else answer_section_start_page(doc)
+        for key in answer_match_keys(pdf_path):
+            fallback.setdefault(key, answer_reference(pdf_path))
+
+        if boundary is None:
+            continue
+
+        for start in find_question_starts(doc):
+            if start["pageIndex"] < boundary:
+                continue
+            for key in answer_match_keys(pdf_path):
+                exact.setdefault((*key, start["questionNumber"]), answer_reference(pdf_path, start))
+
+    return exact, fallback
+
+
+def find_answer_for_question(pdf_path, question_number, answer_exact, answer_fallback):
+    for key in answer_match_keys(pdf_path):
+        match = answer_exact.get((*key, question_number))
+        if match:
+            return match
+    for key in answer_match_keys(pdf_path):
+        match = answer_fallback.get(key)
+        if match:
+            return match
+    return None
 
 
 def build_subject(subject_key):
@@ -609,7 +735,12 @@ def build_subject(subject_key):
     skipped = []
 
     pdf_paths = pdf_paths_for(config)
+    answer_exact, answer_fallback = build_answer_index(pdf_paths)
     for pdf_path in pdf_paths:
+        role = document_role(pdf_path)
+        if role == "answer":
+            continue
+
         try:
             doc = fitz.open(pdf_path)
         except Exception as exc:
@@ -617,6 +748,9 @@ def build_subject(subject_key):
             continue
 
         starts = find_question_starts(doc)
+        answer_boundary = answer_section_start_page(doc) if role == "mixed" else None
+        if answer_boundary is not None:
+            starts = [start for start in starts if start["pageIndex"] < answer_boundary]
         if not starts:
             skipped.append({"file": str(pdf_path.relative_to(ROOT)), "reason": "No question starts detected"})
             continue
@@ -630,6 +764,9 @@ def build_subject(subject_key):
                 continue
             classification = classify_question(text, models, idf)
             rel_path = str(pdf_path.relative_to(ROOT))
+            answer = find_answer_for_question(pdf_path, start["questionNumber"], answer_exact, answer_fallback)
+            if not answer:
+                continue
             questions.append({
                 "id": f"q{len(questions) + 1}",
                 "subject": config["label"],
@@ -643,6 +780,7 @@ def build_subject(subject_key):
                 "y": start["y"],
                 "bbox": start["bbox"],
                 "preview": text[:520],
+                **(answer or {}),
                 **classification,
             })
 

@@ -149,15 +149,25 @@ input {
   margin: 0 0 10px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  padding: 14px;
   background: #fff;
+  color: inherit;
+  text-align: left;
+}
+
+.question-preview {
+  display: grid;
+  gap: 9px;
+  width: 100%;
+  border: 0;
+  padding: 14px 14px 0;
+  background: transparent;
   color: inherit;
   text-align: left;
   cursor: pointer;
 }
 
 .question-card:hover,
-.question-card:focus-visible,
+.question-preview:focus-visible,
 .question-card.active {
   border-color: var(--accent);
   outline: none;
@@ -205,6 +215,27 @@ input {
   font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.answer-link {
+  justify-self: start;
+  margin: 0 14px 14px;
+  border: 1px solid #bfd8d3;
+  border-radius: 6px;
+  padding: 7px 10px;
+  color: var(--accent-strong);
+  background: #f1faf7;
+  font-size: 0.82rem;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.answer-link.disabled,
+.answer-link[aria-disabled="true"] {
+  pointer-events: none;
+  border-color: #d8dee4;
+  color: var(--muted);
+  background: #f3f5f4;
 }
 
 .viewer-pane {
@@ -270,6 +301,12 @@ input {
   min-width: 0;
 }
 
+.viewer-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+}
+
 #viewerTitle,
 #viewerSubtitle {
   overflow: hidden;
@@ -282,7 +319,8 @@ input {
   font-size: 0.86rem;
 }
 
-#openPdf {
+#openPdf,
+#answerPdf {
   flex: 0 0 auto;
   border: 1px solid var(--accent);
   border-radius: 6px;
@@ -293,10 +331,18 @@ input {
   text-decoration: none;
 }
 
-#openPdf[aria-disabled="true"] {
+#answerPdf {
+  border-color: #bfd8d3;
+  color: var(--accent-strong);
+  background: #f1faf7;
+}
+
+#openPdf[aria-disabled="true"],
+#answerPdf[aria-disabled="true"] {
   pointer-events: none;
   border-color: #b9c2c8;
   background: #cdd4d8;
+  color: #fff;
 }
 
 iframe {

@@ -19,6 +19,7 @@ const pdfFrame = document.querySelector("#pdfFrame");
 const viewerTitle = document.querySelector("#viewerTitle");
 const viewerSubtitle = document.querySelector("#viewerSubtitle");
 const openPdf = document.querySelector("#openPdf");
+const answerPdf = document.querySelector("#answerPdf");
 const appShell = document.querySelector(".app-shell");
 const layoutResizer = document.querySelector("#layoutResizer");
 
@@ -64,6 +65,13 @@ function pdfUrl(question) {
   const page = Number(question.page) || 1;
   const y = Number(question.y) || 0;
   return `${encodeURI(question.file)}#page=${page}&zoom=125,0,${y}`;
+}
+
+function answerUrl(question) {
+  if (!question.answerFile) return "";
+  const page = Number(question.answerPage) || 1;
+  const y = Number(question.answerY) || 0;
+  return `${encodeURI(question.answerFile)}#page=${page}&zoom=125,0,${y}`;
 }
 
 function populateFilters() {
@@ -163,24 +171,27 @@ function renderList() {
 
   const fragment = document.createDocumentFragment();
   for (const question of state.filtered.slice(0, 500)) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = `question-card${question.id === state.selectedId ? " active" : ""}`;
-    button.dataset.id = question.id;
-    button.innerHTML = `
-      <div class="card-topline">
-        <span>Q${escapeHtml(question.questionNumber)} · p.${escapeHtml(question.page)}</span>
-        <span class="tag">${escapeHtml(question.learningOutcomeCode || "Review")}</span>
-      </div>
-      <div class="source-meta">
-        ${escapeHtml(question.schoolName || question.fileName)} · ${escapeHtml(question.paperKind || "Question paper")} · ${escapeHtml(question.year || "Year unknown")}
-      </div>
-      <p class="preview">${escapeHtml(question.preview)}</p>
-      <div class="classification">
-        ${escapeHtml(question.topicTitle)}
-      </div>
+    const card = document.createElement("article");
+    card.className = `question-card${question.id === state.selectedId ? " active" : ""}`;
+    card.innerHTML = `
+      <button class="question-preview" type="button" data-id="${escapeHtml(question.id)}">
+        <div class="card-topline">
+          <span>Q${escapeHtml(question.questionNumber)} · p.${escapeHtml(question.page)}</span>
+          <span class="tag">${escapeHtml(question.learningOutcomeCode || "Review")}</span>
+        </div>
+        <div class="source-meta">
+          ${escapeHtml(question.schoolName || question.fileName)} · ${escapeHtml(question.paperKind || "Question paper")} · ${escapeHtml(question.year || "Year unknown")}
+        </div>
+        <p class="preview">${escapeHtml(question.preview)}</p>
+        <div class="classification">
+          ${escapeHtml(question.topicTitle)}
+        </div>
+      </button>
+      <a class="answer-link${question.answerFile ? "" : " disabled"}" href="${escapeHtml(answerUrl(question) || "#")}" target="_blank" rel="noreferrer" aria-disabled="${question.answerFile ? "false" : "true"}">
+        ${question.answerFile ? "Answer" : "No answer linked"}
+      </a>
     `;
-    fragment.append(button);
+    fragment.append(card);
   }
 
   if (state.filtered.length > 500) {
@@ -199,6 +210,9 @@ function selectQuestion(question) {
   pdfFrame.src = url;
   openPdf.href = url;
   openPdf.setAttribute("aria-disabled", "false");
+  const answer = answerUrl(question);
+  answerPdf.href = answer || "#";
+  answerPdf.setAttribute("aria-disabled", answer ? "false" : "true");
   viewerTitle.textContent = `${question.fileName} · Q${question.questionNumber}`;
   viewerSubtitle.textContent = `Page ${question.page}, ${question.topicTitle}, LO ${question.learningOutcomeCode || "review"}`;
   activeClass.textContent = `${question.topicTitle} · LO ${question.learningOutcomeCode || "review"}`;
@@ -254,9 +268,9 @@ function endResize(event) {
 }
 
 questionList.addEventListener("click", (event) => {
-  const card = event.target.closest(".question-card");
-  if (!card) return;
-  const question = state.questions.find((item) => item.id === card.dataset.id);
+  const preview = event.target.closest(".question-preview");
+  if (!preview) return;
+  const question = state.questions.find((item) => item.id === preview.dataset.id);
   if (question) selectQuestion(question);
 });
 
