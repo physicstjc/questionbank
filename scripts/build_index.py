@@ -128,6 +128,13 @@ def normalize_text(text):
     return re.sub(r"\s+", " ", text).strip()
 
 
+def clean_learning_outcome_statement(text):
+    text = normalize_text(text)
+    text = re.split(r"\s+SECTION\s+(?:[IVX]+|\d+)[:\s]", text, maxsplit=1)[0]
+    text = re.sub(r"\s+\d{1,2}$", "", text)
+    return text.rstrip(". ")
+
+
 def is_admin_line(text):
     compact = normalize_text(text)
     if not compact:
@@ -259,15 +266,16 @@ def extract_syllabus(syllabus_pdf):
         def flush_outcome():
             nonlocal current_letter, current_parts
             if current_letter and current_parts:
-                statement = normalize_text(" ".join(current_parts)).rstrip(". ")
+                statement = clean_learning_outcome_statement(" ".join(current_parts))
                 code_prefix = current_subtopic or str(number)
-                learning_outcomes.append({
-                    "code": f"{code_prefix}{current_letter}",
-                    "letter": current_letter,
-                    "subtopic": current_subtopic,
-                    "subtopicTitle": current_subtopic_title,
-                    "statement": statement,
-                })
+                if statement:
+                    learning_outcomes.append({
+                        "code": f"{code_prefix}{current_letter}",
+                        "letter": current_letter,
+                        "subtopic": current_subtopic,
+                        "subtopicTitle": current_subtopic_title,
+                        "statement": statement,
+                    })
             current_letter = None
             current_parts = []
 
@@ -279,6 +287,10 @@ def extract_syllabus(syllabus_pdf):
             if not in_outcomes:
                 continue
             if lower.startswith("candidates should be able to"):
+                continue
+            if re.match(r"^SECTION\s+(?:[IVX]+|\d+)", line):
+                flush_outcome()
+                in_outcomes = False
                 continue
 
             subtopic = re.match(rf"^({number}\.\d+)\s+(.+)$", line)
@@ -561,7 +573,6 @@ def build_subject(subject_key):
     config["questions_out"].write_text(json.dumps({
         "metadata": metadata,
         "questions": questions,
-        "skipped": skipped,
     }, ensure_ascii=False), encoding="utf-8")
 
     print(json.dumps(metadata, indent=2))

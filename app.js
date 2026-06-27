@@ -135,13 +135,12 @@ function renderList() {
     button.dataset.id = question.id;
     button.innerHTML = `
       <div class="card-topline">
-        <span>${escapeHtml(question.year)} · ${escapeHtml(question.paperKind)} · Q${escapeHtml(question.questionNumber)} · p.${escapeHtml(question.page)}</span>
+        <span>Q${escapeHtml(question.questionNumber)} · p.${escapeHtml(question.page)}</span>
         <span class="tag">${escapeHtml(question.learningOutcomeCode || "Review")}</span>
       </div>
       <p class="preview">${escapeHtml(question.preview)}</p>
       <div class="classification">
-        ${escapeHtml(question.topicTitle)}<br>
-        ${escapeHtml(question.learningOutcome)}
+        ${escapeHtml(question.topicTitle)}
       </div>
     `;
     fragment.append(button);
@@ -165,7 +164,7 @@ function selectQuestion(question) {
   openPdf.setAttribute("aria-disabled", "false");
   viewerTitle.textContent = `${question.fileName} · Q${question.questionNumber}`;
   viewerSubtitle.textContent = `Page ${question.page}, ${question.topicTitle}, LO ${question.learningOutcomeCode || "review"}`;
-  activeClass.textContent = `${question.topicTitle} · ${question.learningOutcome}`;
+  activeClass.textContent = `${question.topicTitle} · LO ${question.learningOutcomeCode || "review"}`;
   renderList();
 }
 
@@ -270,7 +269,7 @@ async function init() {
   const questionData = await questionResponse.json();
   state.questions = questionData.questions;
 
-  stats.textContent = `${questionData.metadata.questionCount.toLocaleString()} ${subjectConfig.label.toLowerCase()} questions classified from ${questionData.metadata.pdfCount.toLocaleString()} PDFs.`;
+  stats.textContent = `${subjectConfig.label} question bank`;
   populateFilters();
   applyFilters();
 }
