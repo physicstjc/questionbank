@@ -7,6 +7,9 @@ const state = {
 
 const topicFilter = document.querySelector("#topicFilter");
 const loFilter = document.querySelector("#loFilter");
+const schoolFilter = document.querySelector("#schoolFilter");
+const paperFilter = document.querySelector("#paperFilter");
+const yearFilter = document.querySelector("#yearFilter");
 const searchInput = document.querySelector("#searchInput");
 const questionList = document.querySelector("#questionList");
 const resultCount = document.querySelector("#resultCount");
@@ -71,6 +74,7 @@ function populateFilters() {
     topicFilter.append(option);
   }
   populateLearningOutcomes();
+  populateSourceFilters();
 }
 
 function populateLearningOutcomes() {
@@ -91,9 +95,33 @@ function populateLearningOutcomes() {
   }
 }
 
+function populateSelect(select, values, allLabel) {
+  select.innerHTML = `<option value="">${allLabel}</option>`;
+  for (const value of values) {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = value;
+    select.append(option);
+  }
+}
+
+function populateSourceFilters() {
+  const schools = [...new Set(state.questions.map((question) => question.schoolName).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b));
+  const papers = [...new Set(state.questions.map((question) => question.paperKind).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b));
+  const years = [...new Set(state.questions.map((question) => question.year).filter(Boolean))]
+    .sort((a, b) => b.localeCompare(a));
+
+  populateSelect(schoolFilter, schools, "All schools");
+  populateSelect(paperFilter, papers, "All papers");
+  populateSelect(yearFilter, years, "All years");
+}
+
 function matchesSearch(question, needle) {
   if (!needle) return true;
   const haystack = [
+    question.schoolName,
     question.fileName,
     question.paperKind,
     question.topicTitle,
@@ -107,11 +135,17 @@ function matchesSearch(question, needle) {
 function applyFilters() {
   const topic = topicFilter.value;
   const lo = loFilter.value;
+  const school = schoolFilter.value;
+  const paper = paperFilter.value;
+  const year = yearFilter.value;
   const needle = searchInput.value.trim().toLowerCase();
 
   state.filtered = state.questions.filter((question) => {
     if (topic && String(question.topicNumber) !== topic) return false;
     if (lo && question.learningOutcomeCode !== lo) return false;
+    if (school && question.schoolName !== school) return false;
+    if (paper && question.paperKind !== paper) return false;
+    if (year && question.year !== year) return false;
     return matchesSearch(question, needle);
   });
 
@@ -137,6 +171,9 @@ function renderList() {
       <div class="card-topline">
         <span>Q${escapeHtml(question.questionNumber)} · p.${escapeHtml(question.page)}</span>
         <span class="tag">${escapeHtml(question.learningOutcomeCode || "Review")}</span>
+      </div>
+      <div class="source-meta">
+        ${escapeHtml(question.schoolName || question.fileName)} · ${escapeHtml(question.paperKind || "Question paper")} · ${escapeHtml(question.year || "Year unknown")}
       </div>
       <p class="preview">${escapeHtml(question.preview)}</p>
       <div class="classification">
@@ -228,6 +265,9 @@ topicFilter.addEventListener("change", () => {
   applyFilters();
 });
 loFilter.addEventListener("change", applyFilters);
+schoolFilter.addEventListener("change", applyFilters);
+paperFilter.addEventListener("change", applyFilters);
+yearFilter.addEventListener("change", applyFilters);
 searchInput.addEventListener("input", applyFilters);
 layoutResizer.addEventListener("pointerdown", beginResize);
 layoutResizer.addEventListener("pointermove", updateResize);

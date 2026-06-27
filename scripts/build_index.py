@@ -566,6 +566,31 @@ def paper_kind(path):
     return "Question paper"
 
 
+def school_name(path):
+    stem = path.stem
+    stem = re.sub(r"[_\-]+", " ", stem)
+    stem = re.sub(r"\s+", " ", stem).strip()
+    stem = re.sub(r"^(?:copy of\s+)?(?:\d{1,2}\s+)?(?:\d{4}\s+)?", "", stem, flags=re.I)
+
+    stop_pattern = (
+        r"\b(?:"
+        r"609[123]|4e|4exp|4xp|4g3|sec(?:ondary)?\s*4|sec|s4|y4op|exp|express|pure|"
+        r"physics|physic|phy|chemistry|chem|biology|bio|"
+        r"prelim(?:inary)?|fye|paper|pp|p[123]|qp|ms|ans|answer|answers|"
+        r"solution|solutions|detailed|final|shared|markscheme|scheme|"
+        r"ordinary|level|exam(?:ination)?"
+        r")\b"
+    )
+    match = re.search(stop_pattern, stem, re.I)
+    if match:
+        stem = stem[:match.start()]
+
+    stem = re.sub(r"\b\d{4}\b", " ", stem)
+    stem = re.sub(r"\b\d{1,2}\b", " ", stem)
+    stem = re.sub(r"\s+", " ", stem).strip(" _-/()[]")
+    return stem or path.stem
+
+
 def pdf_paths_for(config):
     paths = []
     for pdf_dir in config["pdf_dirs"]:
@@ -610,6 +635,7 @@ def build_subject(subject_key):
                 "subject": config["label"],
                 "file": rel_path,
                 "fileName": pdf_path.name,
+                "schoolName": school_name(pdf_path),
                 "year": pdf_path.parts[-2] if pdf_path.parent != ROOT else "",
                 "paperKind": paper_kind(pdf_path),
                 "questionNumber": start["questionNumber"],

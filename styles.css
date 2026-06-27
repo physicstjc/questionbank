@@ -90,7 +90,7 @@ h1 {
 
 .filters {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
   padding: 16px 24px;
   border-bottom: 1px solid var(--line);
@@ -196,6 +196,15 @@ input {
   color: var(--muted);
   font-size: 0.78rem;
   line-height: 1.35;
+}
+
+.source-meta {
+  overflow: hidden;
+  color: #31414b;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .viewer-pane {
