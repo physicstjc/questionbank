@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import argparse
 import json
 import math
 import re
@@ -9,8 +10,83 @@ import fitz
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SYLLABUS_PDF = ROOT / "6091_y26_sy.pdf"
 OUT_DIR = ROOT / "data"
+
+SUBJECTS = {
+    "physics": {
+        "label": "Physics",
+        "syllabus": ROOT / "6091_y26_sy.pdf",
+        "pdf_dirs": [ROOT / "2024", ROOT / "2025"],
+        "syllabus_out": OUT_DIR / "syllabus.json",
+        "questions_out": OUT_DIR / "questions.json",
+        "topic_keywords": {
+            1: "measurement si unit scalar vector vernier caliper micrometer ruler stopwatch precision accuracy magnitude prefix",
+            2: "kinematics speed velocity acceleration displacement distance time graph free fall gradient area motion rest uniform",
+            3: "force forces friction tension normal air resistance mass weight gravity gravitational newton inertia terminal velocity free body resultant",
+            4: "moment moments pivot torque equilibrium centre gravity stability balance clockwise anticlockwise scaffold lever",
+            5: "pressure hydraulic density fluid liquid column manometer atmosphere atmospheric pascal area volume height",
+            6: "work power efficiency kinetic potential conservation renewable fossil nuclear solar wind hydroelectric geothermal energy store",
+            7: "solid liquid gas particle particles molecule molecules atom atoms brownian random kinetic pressure states matter",
+            8: "conduction convection radiation thermal equilibrium temperature heat heating insulator conductor surface colour texture",
+            9: "specific heat capacity latent melting boiling evaporation condensation cooling curve internal temperature change state",
+            10: "wave waves sound ultrasound echo frequency wavelength amplitude period transverse longitudinal compression rarefaction ripple",
+            11: "electromagnetic spectrum radio microwave infrared visible ultraviolet xray x ray gamma wavelength frequency radiation",
+            12: "light reflection refraction refractive index critical angle total internal optical fibre lens focal image ray mirror prism",
+            13: "static electricity charge charges electrostatic electron electrons induction electric field precipitator attract repel coulomb",
+            14: "current charge emf potential difference voltage resistance resistor ohm iv characteristic diode filament conductor circuit",
+            15: "series parallel circuit circuits ammeter voltmeter resistor potentiometer thermistor ldr led branch component battery switch",
+            16: "mains plug fuse fuses circuit breaker live neutral earth earthing insulation double insulation kettle appliance cable kilowatt hour",
+            17: "magnet magnets magnetic field compass induced magnetism bar magnet permanent temporary iron steel pole poles",
+            18: "electromagnetism solenoid current carrying conductor motor motor coil split ring commutator fleming left hand magnetic effect force",
+            19: "electromagnetic induction induced emf generator transformer faraday lenz slip rings primary secondary turns high voltage transmission",
+            20: "radioactivity radioactive decay isotope isotopes nuclide nucleus proton neutron nucleon alpha beta gamma half life background fission fusion radiation",
+        },
+    },
+    "chem": {
+        "label": "Chemistry",
+        "syllabus": ROOT / "chem" / "6092_y26_sy.pdf",
+        "pdf_dirs": [ROOT / "chem" / "2024", ROOT / "chem" / "2025"],
+        "syllabus_out": OUT_DIR / "chem-syllabus.json",
+        "questions_out": OUT_DIR / "chem-questions.json",
+        "topic_keywords": {
+            1: "apparatus burette pipette measuring cylinder gas syringe separation purification filtration crystallisation evaporation sublimation distillation fractional chromatography rf melting boiling purity solvent",
+            2: "kinetic particle theory solid liquid gas diffusion atom proton neutron electron nucleus shell isotope nuclide atomic structure nucleon ion",
+            3: "ionic covalent metallic bonding dot cross lattice electrostatic attraction molecule macromolecular graphite diamond graphene silicon dioxide melting boiling conductor malleable ductile",
+            4: "mole molar mass relative atomic molecular formula empirical stoichiometry equation ionic equation concentration titration yield purity avogadro volume gas",
+            5: "acid alkali base ph neutralisation salt ammonia ammonium carbonate sulfate chloride nitrate hydroxide solubility titration precipitation haber",
+            6: "qualitative analysis sodium hydroxide aqueous ammonia precipitate cation anion gas test limewater litmus splint barium nitrate silver nitrate",
+            7: "redox oxidation reduction oxidising reducing agent electron transfer oxidation state electrolysis electrolyte electrode anode cathode molten aqueous",
+            8: "periodic table group period alkali metal halogen noble gas transition element reactivity series displacement rusting corrosion galvanising sacrificial protection",
+            9: "energetics enthalpy exothermic endothermic activation energy energy profile bond breaking bond making heat temperature change",
+            10: "rate reaction collision concentration pressure particle size temperature catalyst activation energy enzyme graph gradient volume gas",
+            11: "organic alkane alkene alcohol carboxylic acid homologous series functional group saturated unsaturated hydrocarbon crude oil cracking polymerisation ester ethanol ethanoic",
+            12: "air pollutant carbon monoxide nitrogen oxide sulfur dioxide ozone acid rain greenhouse carbon dioxide methane global warming carbon cycle catalytic converter cfc",
+        },
+    },
+    "bio": {
+        "label": "Biology",
+        "syllabus": ROOT / "bio" / "6093_y26_sy.pdf",
+        "pdf_dirs": [ROOT / "bio" / "2024", ROOT / "bio" / "2025"],
+        "syllabus_out": OUT_DIR / "bio-syllabus.json",
+        "questions_out": OUT_DIR / "bio-questions.json",
+        "topic_keywords": {
+            1: "cell wall membrane cytoplasm nucleus vacuole chloroplast mitochondria ribosome golgi endoplasmic reticulum plant animal specialised root hair red blood",
+            2: "diffusion osmosis active transport concentration gradient water potential plasmolysis turgid flaccid villi root hair",
+            3: "carbohydrate fat protein starch reducing sugar benedict iodine biuret ethanol enzyme active site substrate temperature ph lock key",
+            4: "digestion digestive alimentary canal mouth salivary stomach duodenum pancreas liver ileum villus absorption assimilation peristalsis bile alcohol",
+            5: "blood heart artery vein capillary plasma red white platelets haemoglobin oxygen cardiac cycle systole diastole coronary transfusion",
+            6: "respiration breathing gas exchange alveoli trachea bronchi bronchiole diaphragm intercostal aerobic anaerobic oxygen debt tobacco nicotine tar",
+            7: "excretion kidney nephron ureter bladder urethra dialysis ultrafiltration selective reabsorption urine urea nitrogenous",
+            8: "homeostasis hormone endocrine insulin glucagon diabetes adh osmoregulation nervous reflex eye pupil hypothalamus temperature receptor neurone effector",
+            9: "infectious disease pathogen bacteria virus influenza pneumococcal vaccine antibody antibiotic resistance transmission symptoms",
+            10: "leaf xylem phloem photosynthesis transpiration translocation stomata chlorophyll limiting factor root hair sucrose vascular bundle",
+            11: "ecosystem food chain food web producer consumer decomposer trophic pyramid biomass carbon cycle global warming deforestation conservation biodiversity",
+            12: "dna gene chromosome nucleotide base pairing polypeptide genetic code transgenic insulin biotechnology genetic engineering",
+            13: "reproduction asexual sexual mitosis meiosis gamete zygote flower pollination fertilisation seed fruit menstrual pregnancy hiv std",
+            14: "inheritance allele genotype phenotype dominant recessive homozygous heterozygous monohybrid codominance sex chromosome mutation variation selection",
+        },
+    },
+}
 
 STOPWORDS = {
     "the", "and", "for", "with", "that", "this", "from", "into", "are", "was",
@@ -22,32 +98,9 @@ STOPWORDS = {
     "relationship", "relationships", "calculate", "determine", "simple",
     "situations", "solve", "related", "problems", "terms", "effect", "effects",
     "given", "examples", "including", "required", "paper", "question", "fig",
+    "diagram", "diagrams", "table", "tables", "data", "marks", "mark",
 }
 
-TOPIC_KEYWORDS = {
-    1: "measurement si unit scalar vector vernier caliper micrometer ruler stopwatch precision accuracy magnitude prefix",
-    2: "kinematics speed velocity acceleration displacement distance time graph free fall gradient area motion rest uniform",
-    3: "force forces friction tension normal air resistance mass weight gravity gravitational newton inertia terminal velocity free body resultant",
-    4: "moment moments pivot torque equilibrium centre gravity stability balance clockwise anticlockwise scaffold lever",
-    5: "pressure hydraulic density fluid liquid column manometer atmosphere atmospheric pascal area volume height",
-    6: "work power efficiency kinetic potential conservation renewable fossil nuclear solar wind hydroelectric geothermal energy store",
-    7: "solid liquid gas particle particles molecule molecules atom atoms brownian random kinetic pressure states matter",
-    8: "conduction convection radiation thermal equilibrium temperature heat heating insulator conductor surface colour texture",
-    9: "specific heat capacity latent melting boiling evaporation condensation cooling curve internal temperature change state",
-    10: "wave waves sound ultrasound echo frequency wavelength amplitude period transverse longitudinal compression rarefaction ripple",
-    11: "electromagnetic spectrum radio microwave infrared visible ultraviolet xray x ray gamma wavelength frequency radiation",
-    12: "light reflection refraction refractive index critical angle total internal optical fibre lens focal image ray mirror prism",
-    13: "static electricity charge charges electrostatic electron electrons induction electric field precipitator attract repel coulomb",
-    14: "current charge emf potential difference voltage resistance resistor ohm iv characteristic diode filament conductor circuit",
-    15: "series parallel circuit circuits ammeter voltmeter resistor potentiometer thermistor ldr led branch component battery switch",
-    16: "mains plug fuse fuses circuit breaker live neutral earth earthing insulation double insulation kettle appliance cable kilowatt hour",
-    17: "magnet magnets magnetic field compass induced magnetism bar magnet permanent temporary iron steel pole poles",
-    18: "electromagnetism solenoid current carrying conductor motor coil split ring commutator fleming left hand magnetic effect force",
-    19: "electromagnetic induction induced emf generator transformer faraday lenz slip rings primary secondary turns high voltage transmission",
-    20: "radioactivity radioactive decay isotope isotopes nuclide nucleus proton neutron nucleon alpha beta gamma half life background fission fusion radiation",
-}
-
-LO_RE = re.compile(r"^\(([a-z])\)\s+(.+?)(?=\n\([a-z]\)|\Z)", re.S)
 QUESTION_START_RE = re.compile(r"^\s*(\d{1,2})\s+(?=[A-Z0-9(])")
 PAGE_NO_RE = re.compile(r"^\s*\d{1,3}\s*$")
 ADMIN_LINE_RE = re.compile(
@@ -72,8 +125,7 @@ ADMIN_LINE_RE = re.compile(
 
 
 def normalize_text(text):
-    text = re.sub(r"\s+", " ", text)
-    return text.strip()
+    return re.sub(r"\s+", " ", text).strip()
 
 
 def is_admin_line(text):
@@ -86,7 +138,7 @@ def is_admin_line(text):
         return True
     if re.fullmatch(r"[\[\]().,/\\\-\s]+", compact):
         return True
-    if re.fullmatch(r"(physics|paper\s+[123]|structured and free response|multiple choice|practical)", compact, re.I):
+    if re.fullmatch(r"(physics|chemistry|biology|paper\s+[123]|structured and free response|multiple choice|practical)", compact, re.I):
         return True
     return False
 
@@ -113,27 +165,46 @@ def clean_question_text(text):
     text = " ".join(kept)
     text = re.sub(r"\b\d{4}\s+Preliminary Exam/[^A-Z]*(?=\b[A-Z]|\b\d{1,2}\b)", " ", text, flags=re.I)
     text = re.sub(r"\b[A-Z]{2,}/\d{2}/Preliminary Examination/[^A-Z]*(?=\b[A-Z]|\b\d{1,2}\b)", " ", text, flags=re.I)
-    text = re.sub(r"\b(?:[A-Z]{2,}|[A-Z][a-z]+)/(?:\d{2,4}|[A-Z][a-z]+)/(?:Preliminary|Physics|6091)[^A-Z]*(?=\b[A-Z][a-z]|\b\d{1,2}\b)", " ", text)
+    text = re.sub(r"\b(?:[A-Z]{2,}|[A-Z][a-z]+)/(?:\d{2,4}|[A-Z][a-z]+)/(?:Preliminary|Physics|Chemistry|Biology|609[123])[^A-Z]*(?=\b[A-Z][a-z]|\b\d{1,2}\b)", " ", text)
     text = re.sub(r"\bTotal\s+Question\s+Answer\s+Marks\b", " ", text, flags=re.I)
-    text = re.sub(r"\s+", " ", text)
-    return text.strip()
+    return re.sub(r"\s+", " ", text).strip()
 
 
 def tokenize(text):
     text = text.lower()
     text = text.replace("e.m.f", "emf").replace("p.d", "pd").replace("d.c", "dc")
-    tokens = re.findall(r"[a-z][a-z0-9]+|[αβγµλρ]", text)
+    tokens = re.findall(r"[a-z][a-z0-9]+|[αβγµλρΩΩ]", text)
     return [token for token in tokens if token not in STOPWORDS and len(token) > 1]
 
 
-def extract_syllabus():
-    doc = fitz.open(SYLLABUS_PDF)
-    raw_lines = []
-    for page_index in range(9, 28):
-        raw_lines.extend(doc[page_index].get_text().splitlines())
+def subject_content_lines(syllabus_pdf):
+    doc = fitz.open(syllabus_pdf)
+    start_page = None
+    end_page = len(doc)
+    for index, page in enumerate(doc):
+        text = page.get_text()
+        if start_page is None and "SUBJECT CONTENT" in text and "SECTION" in text and "Overview" in text:
+            start_page = index
+        if start_page is not None and index > start_page and "SUMMARY OF KEY" in text:
+            end_page = index
+            break
+    if start_page is None:
+        raise RuntimeError(f"Could not find SUBJECT CONTENT in {syllabus_pdf}")
 
+    raw_lines = []
+    for page_index in range(start_page, end_page):
+        raw_lines.extend(doc[page_index].get_text().splitlines())
     lines = [normalize_text(line) for line in raw_lines]
-    lines = [line for line in lines if line]
+    return [
+        line for line in lines
+        if line
+        and not PAGE_NO_RE.match(line)
+        and not re.match(r"^609\d\s+.+\s+GCE ORDINARY LEVEL SYLLABUS$", line)
+    ]
+
+
+def extract_syllabus(syllabus_pdf):
+    lines = subject_content_lines(syllabus_pdf)
 
     headings = []
     idx = 0
@@ -152,7 +223,7 @@ def extract_syllabus():
             number = int(same_line.group(1))
             title = same_line.group(2)
 
-        if number and 1 <= number <= 20 and title and not title.lower().startswith(("candidates", "content", "learning")):
+        if number and 1 <= number <= 25 and title and not title.lower().startswith(("candidates", "content", "learning", "section")):
             if not headings or headings[-1]["number"] != number:
                 headings.append({"number": number, "title": title, "lineIndex": idx})
         idx += 1
@@ -181,16 +252,24 @@ def extract_syllabus():
         learning_outcomes = []
         in_outcomes = False
         current_letter = None
+        current_subtopic = None
+        current_subtopic_title = None
         current_parts = []
 
         def flush_outcome():
+            nonlocal current_letter, current_parts
             if current_letter and current_parts:
                 statement = normalize_text(" ".join(current_parts)).rstrip(". ")
+                code_prefix = current_subtopic or str(number)
                 learning_outcomes.append({
-                    "code": f"{number}{current_letter}",
+                    "code": f"{code_prefix}{current_letter}",
                     "letter": current_letter,
+                    "subtopic": current_subtopic,
+                    "subtopicTitle": current_subtopic_title,
                     "statement": statement,
                 })
+            current_letter = None
+            current_parts = []
 
         for line in chunk_lines:
             lower = line.lower()
@@ -200,6 +279,13 @@ def extract_syllabus():
             if not in_outcomes:
                 continue
             if lower.startswith("candidates should be able to"):
+                continue
+
+            subtopic = re.match(rf"^({number}\.\d+)\s+(.+)$", line)
+            if subtopic:
+                flush_outcome()
+                current_subtopic = subtopic.group(1)
+                current_subtopic_title = normalize_text(subtopic.group(2))
                 continue
 
             outcome_start = re.match(r"^\(([a-z])\)\s*(.*)$", line)
@@ -248,7 +334,7 @@ def find_question_starts(doc):
         height = page.rect.height
         for item in line_items(page):
             text = item["text"]
-            x0, y0, x1, y1 = item["bbox"]
+            x0, y0, _x1, _y1 = item["bbox"]
             if y0 < 42 or y0 > height - 42:
                 continue
             if PAGE_NO_RE.match(text):
@@ -257,9 +343,9 @@ def find_question_starts(doc):
             if not match:
                 continue
             number = int(match.group(1))
-            if number < 1 or number > 60:
+            if number < 1 or number > 80:
                 continue
-            if x0 > width * 0.22:
+            if x0 > width * 0.24:
                 continue
             if re.search(r"(marks?|section|paper|total|turn over|answer)", text, re.I):
                 continue
@@ -276,15 +362,10 @@ def find_question_starts(doc):
     return starts
 
 
-def page_text(doc, page_index):
-    if page_index < 0 or page_index >= len(doc):
-        return ""
-    return doc[page_index].get_text()
-
-
 def extract_question_text(page_texts, start, end):
     fragments = []
-    for page_index in range(start["pageIndex"], end["pageIndex"] + 1 if end else min(len(page_texts), start["pageIndex"] + 2)):
+    end_page = end["pageIndex"] + 1 if end else min(len(page_texts), start["pageIndex"] + 2)
+    for page_index in range(start["pageIndex"], end_page):
         text = page_texts[page_index] if 0 <= page_index < len(page_texts) else ""
         lines = [normalize_text(line) for line in text.splitlines()]
         lines = [line for line in lines if line and not PAGE_NO_RE.match(line)]
@@ -302,18 +383,21 @@ def extract_question_text(page_texts, start, end):
         if next_match:
             text = text[: len(str(start["questionNumber"])) + 1 + next_match.start()]
 
-    text = clean_question_text(text)
-    return text[:1800]
+    return clean_question_text(text)[:1800]
 
 
-def build_topic_models(topics):
+def build_topic_models(topics, topic_keywords):
     models = []
     all_docs = []
     for topic in topics:
-        topic_doc = " ".join([topic["title"], *topic["content"], TOPIC_KEYWORDS.get(topic["number"], "")])
+        topic_doc = " ".join([topic["title"], *topic["content"], topic_keywords.get(topic["number"], "")])
         lo_docs = []
         for lo in topic["learningOutcomes"]:
-            lo_doc = " ".join([topic_doc, lo["statement"]])
+            lo_doc = " ".join([
+                topic_doc,
+                lo.get("subtopicTitle") or "",
+                lo["statement"],
+            ])
             lo_docs.append((lo, Counter(tokenize(lo_doc))))
             all_docs.append(set(tokenize(lo_doc)))
         models.append((topic, Counter(tokenize(topic_doc)), lo_docs))
@@ -338,7 +422,7 @@ def weighted_overlap(question_tokens, model_tokens, idf):
     return score
 
 
-def forced_topic_number(text):
+def forced_physics_topic_number(text):
     lower = text.lower()
     rules = [
         (20, r"\b(radioactive|radioactivity|half[- ]life|isotope|isotopes|nuclide|alpha|beta|gamma|background radiation|nuclear fission|nuclear fusion)\b"),
@@ -354,16 +438,16 @@ def forced_topic_number(text):
     return None
 
 
-def classify_question(text, models, idf):
+def classify_question(text, models, idf, subject_key, topic_keywords):
     tokens = tokenize(text)
     best_topic = None
     best_topic_score = 0.0
-    forced_topic = forced_topic_number(text)
+    forced_topic = forced_physics_topic_number(text) if subject_key == "physics" else None
 
     for topic, topic_tokens, lo_docs in models:
         if forced_topic and topic["number"] != forced_topic:
             continue
-        keyword_tokens = Counter(tokenize(TOPIC_KEYWORDS.get(topic["number"], "")))
+        keyword_tokens = Counter(tokenize(topic_keywords.get(topic["number"], "")))
         topic_score = weighted_overlap(tokens, topic_tokens, idf) + weighted_overlap(tokens, keyword_tokens, idf) * 2.8
         if topic_score > best_topic_score:
             best_topic_score = topic_score
@@ -400,25 +484,35 @@ def classify_question(text, models, idf):
 
 def paper_kind(path):
     name = path.name.lower()
-    if re.search(r"\b(ms|mark|answer|ans|solution|solutions)\b", name):
+    if re.search(r"\b(ms|mark|answer|ans|solution|solutions|key)\b", name):
         return "Answer / marking scheme"
-    if re.search(r"\bp1\b|paper 1|prelim_p1|phy_p1", name):
+    if re.search(r"\bp1\b|paper 1|prelim_p1|phy_p1|chem_p1|bio_p1", name):
         return "Paper 1"
-    if re.search(r"\bp2\b|paper 2|prelim_p2|phy_p2", name):
+    if re.search(r"\bp2\b|paper 2|prelim_p2|phy_p2|chem_p2|bio_p2", name):
         return "Paper 2"
-    if re.search(r"\bp3\b|paper 3|pract", name):
+    if re.search(r"\bp3\b|paper 3|pract|preplist|prep list", name):
         return "Paper 3"
     return "Question paper"
 
 
-def build_index():
+def pdf_paths_for(config):
+    paths = []
+    for pdf_dir in config["pdf_dirs"]:
+        if pdf_dir.exists():
+            paths.extend(pdf_dir.glob("**/*.pdf"))
+    return sorted(path for path in paths if path.resolve() != config["syllabus"].resolve())
+
+
+def build_subject(subject_key):
+    config = SUBJECTS[subject_key]
     OUT_DIR.mkdir(exist_ok=True)
-    topics = extract_syllabus()
-    models, idf = build_topic_models(topics)
+    topics = extract_syllabus(config["syllabus"])
+    topic_keywords = config.get("topic_keywords", {})
+    models, idf = build_topic_models(topics, topic_keywords)
     questions = []
     skipped = []
 
-    pdf_paths = sorted(path for path in ROOT.glob("**/*.pdf") if path.name != SYLLABUS_PDF.name)
+    pdf_paths = pdf_paths_for(config)
     for pdf_path in pdf_paths:
         try:
             doc = fitz.open(pdf_path)
@@ -438,10 +532,11 @@ def build_index():
             text = extract_question_text(page_texts, start, end)
             if len(text) < 24:
                 continue
-            classification = classify_question(text[:650], models, idf)
+            classification = classify_question(text[:650], models, idf, subject_key, topic_keywords)
             rel_path = str(pdf_path.relative_to(ROOT))
             questions.append({
                 "id": f"q{len(questions) + 1}",
+                "subject": config["label"],
                 "file": rel_path,
                 "fileName": pdf_path.name,
                 "year": pdf_path.parts[-2] if pdf_path.parent != ROOT else "",
@@ -455,14 +550,15 @@ def build_index():
             })
 
     metadata = {
-        "sourceSyllabus": SYLLABUS_PDF.name,
+        "subject": config["label"],
+        "sourceSyllabus": str(config["syllabus"].relative_to(ROOT)),
         "pdfCount": len(pdf_paths),
         "questionCount": len(questions),
         "skippedCount": len(skipped),
     }
 
-    (OUT_DIR / "syllabus.json").write_text(json.dumps(topics, ensure_ascii=False, indent=2), encoding="utf-8")
-    (OUT_DIR / "questions.json").write_text(json.dumps({
+    config["syllabus_out"].write_text(json.dumps(topics, ensure_ascii=False, indent=2), encoding="utf-8")
+    config["questions_out"].write_text(json.dumps({
         "metadata": metadata,
         "questions": questions,
         "skipped": skipped,
@@ -471,5 +567,14 @@ def build_index():
     print(json.dumps(metadata, indent=2))
 
 
+def main():
+    parser = argparse.ArgumentParser(description="Build subject question indexes.")
+    parser.add_argument("subjects", nargs="*", choices=sorted(SUBJECTS), help="Subjects to build. Defaults to all.")
+    args = parser.parse_args()
+    subjects = args.subjects or sorted(SUBJECTS)
+    for subject in subjects:
+        build_subject(subject)
+
+
 if __name__ == "__main__":
-    build_index()
+    main()

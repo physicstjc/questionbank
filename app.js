@@ -19,6 +19,27 @@ const openPdf = document.querySelector("#openPdf");
 const appShell = document.querySelector(".app-shell");
 const layoutResizer = document.querySelector("#layoutResizer");
 
+const SUBJECTS = {
+  physics: {
+    label: "Physics",
+    syllabusUrl: "data/syllabus.json",
+    questionsUrl: "data/questions.json",
+  },
+  chem: {
+    label: "Chemistry",
+    syllabusUrl: "data/chem-syllabus.json",
+    questionsUrl: "data/chem-questions.json",
+  },
+  bio: {
+    label: "Biology",
+    syllabusUrl: "data/bio-syllabus.json",
+    questionsUrl: "data/bio-questions.json",
+  },
+};
+
+const subjectKey = document.body.dataset.subject || "physics";
+const subjectConfig = SUBJECTS[subjectKey] || SUBJECTS.physics;
+
 const layoutState = {
   pointerId: null,
   startClientX: 0,
@@ -241,15 +262,15 @@ layoutResizer.addEventListener("keydown", (event) => {
 
 async function init() {
   const [syllabusResponse, questionResponse] = await Promise.all([
-    fetch("data/syllabus.json"),
-    fetch("data/questions.json"),
+    fetch(subjectConfig.syllabusUrl),
+    fetch(subjectConfig.questionsUrl),
   ]);
 
   state.syllabus = await syllabusResponse.json();
   const questionData = await questionResponse.json();
   state.questions = questionData.questions;
 
-  stats.textContent = `${questionData.metadata.questionCount.toLocaleString()} questions classified from ${questionData.metadata.pdfCount.toLocaleString()} PDFs.`;
+  stats.textContent = `${questionData.metadata.questionCount.toLocaleString()} ${subjectConfig.label.toLowerCase()} questions classified from ${questionData.metadata.pdfCount.toLocaleString()} PDFs.`;
   populateFilters();
   applyFilters();
 }

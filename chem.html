@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>6092 Chemistry Question Bank</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body data-subject="chem">
+    <main class="app-shell">
+      <aside class="sidebar">
+        <header class="brand">
+          <nav class="subject-nav" aria-label="Subject pages">
+            <a href="index.html">Physics</a>
+            <a href="chem.html" aria-current="page">Chem</a>
+            <a href="bio.html">Bio</a>
+          </nav>
+          <p class="eyebrow" id="subjectCode">6092 Chemistry</p>
+          <h1>Question Bank</h1>
+          <p id="stats">Loading classified questions...</p>
+        </header>
+
+        <section class="filters" aria-label="Question filters">
+          <label>
+            Topic
+            <select id="topicFilter">
+              <option value="">All topics</option>
+            </select>
+          </label>
+          <label>
+            Learning outcome
+            <select id="loFilter">
+              <option value="">All learning outcomes</option>
+            </select>
+          </label>
+          <label>
+            Search
+            <input id="searchInput" type="search" placeholder="Keyword, school, paper...">
+          </label>
+        </section>
+
+        <section class="result-meta">
+          <strong id="resultCount">0 questions</strong>
+          <span id="activeClass">Choose a question to preview it in the PDF.</span>
+        </section>
+
+        <div id="questionList" class="question-list" aria-live="polite"></div>
+      </aside>
+
+      <div
+        id="layoutResizer"
+        class="resize-handle"
+        role="separator"
+        aria-label="Resize question list and PDF preview"
+        aria-orientation="vertical"
+        aria-valuemin="300"
+        aria-valuemax="900"
+        tabindex="0"
+      ></div>
+
+      <section class="viewer-pane">
+        <div class="viewer-toolbar">
+          <div>
+            <strong id="viewerTitle">No question selected</strong>
+            <span id="viewerSubtitle">The source PDF will open here.</span>
+          </div>
+          <a id="openPdf" href="#" target="_blank" rel="noreferrer" aria-disabled="true">Open PDF</a>
+        </div>
+        <div class="pdf-scroll">
+          <iframe id="pdfFrame" title="Question PDF preview"></iframe>
+        </div>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>
