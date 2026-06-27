@@ -367,8 +367,9 @@ def line_items(page):
     return items
 
 
-def find_question_starts(doc):
-    starts = []
+def find_question_starts(doc, prefer_standalone=False):
+    standalone_starts = []
+    inline_starts = []
     for page_index, page in enumerate(doc):
         width = page.rect.width
         height = page.rect.height
@@ -377,10 +378,10 @@ def find_question_starts(doc):
             x0, y0, _x1, _y1 = item["bbox"]
             if y0 < 42 or y0 > height - 42:
                 continue
-            if PAGE_NO_RE.match(text):
-                continue
-            match = QUESTION_START_RE.match(text)
-            if not match:
+            standalone_match = re.fullmatch(r"\s*(\d{1,2})\s*", text)
+            inline_match = QUESTION_START_RE.match(text)
+            match = standalone_match or inline_match
+            if not match or PAGE_NO_RE.match(text) and not standalone_match:
                 continue
             number = int(match.group(1))
             if number < 1 or number > 80:
@@ -389,17 +390,38 @@ def find_question_starts(doc):
                 continue
             if re.search(r"(marks?|section|paper|total|turn over|answer)", text, re.I):
                 continue
-            if is_admin_question_start(text):
+            if not standalone_match and is_admin_question_start(text):
                 continue
-            starts.append({
+            start = {
                 "questionNumber": number,
                 "pageIndex": page_index,
                 "page": page_index + 1,
                 "y": max(0, math.floor(y0) - 24),
                 "bbox": [round(v, 2) for v in item["bbox"]],
                 "firstLine": text,
-            })
-    return starts
+            }
+            if standalone_match:
+                standalone_starts.append(start)
+            else:
+                inline_starts.append(start)
+
+    if prefer_standalone and len(standalone_starts) >= 8:
+        return sequential_question_starts(standalone_starts)
+    return inline_starts
+
+
+def sequential_question_starts(starts):
+    filtered = []
+    last_number = 0
+    for start in starts:
+        number = start["questionNumber"]
+        if number <= last_number:
+            continue
+        if last_number and number - last_number > 3:
+            continue
+        filtered.append(start)
+        last_number = number
+    return filtered
 
 
 def extract_question_text(page_texts, start, end):
@@ -704,7 +726,7 @@ def build_answer_index(pdf_paths):
         if boundary is None:
             continue
 
-        for start in find_question_starts(doc):
+        for start in find_question_starts(doc, prefer_standalone=paper_code(pdf_path) == "p1"):
             if start["pageIndex"] < boundary:
                 continue
             for key in answer_match_keys(pdf_path):
@@ -723,6 +745,60 @@ def find_answer_for_question(pdf_path, question_number, answer_exact, answer_fal
         if match:
             return match
     return None
+
+
+def question_fingerprint(text):
+    text = normalize_text(text).lower()
+    text = re.sub(r"[^\w\s]", " ", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    return " ".join(text.split()[:80])
+
+
+def source_quality(question):
+    file_name = question.get("fileName", "").lower()
+    score = 0
+    if question.get("answerFile"):
+        score += 100
+    if not re.search(r"\(\d+\)", file_name):
+        score += 20
+    if re.search(r"\bqp\b|question", file_name):
+        score += 8
+    if "copy of" not in file_name:
+        score += 4
+    score -= len(file_name) / 1000
+    score -= int(question.get("page") or 1) / 10000
+    return score
+
+
+def dedupe_questions(questions):
+    best_by_key = {}
+    for question in questions:
+        key = (
+            question.get("subject"),
+            question.get("schoolName"),
+            question.get("year"),
+            question.get("paperKind"),
+            question.get("questionNumber"),
+            question_fingerprint(question.get("preview", "")),
+        )
+        current = best_by_key.get(key)
+        if current is None or source_quality(question) > source_quality(current):
+            best_by_key[key] = question
+
+    deduped = sorted(
+        best_by_key.values(),
+        key=lambda question: (
+            question.get("year", ""),
+            question.get("schoolName", ""),
+            question.get("paperKind", ""),
+            question.get("fileName", ""),
+            int(question.get("page") or 0),
+            int(question.get("questionNumber") or 0),
+        ),
+    )
+    for index, question in enumerate(deduped, 1):
+        question["id"] = f"q{index}"
+    return deduped
 
 
 def build_subject(subject_key):
@@ -747,7 +823,7 @@ def build_subject(subject_key):
             skipped.append({"file": str(pdf_path.relative_to(ROOT)), "reason": str(exc)})
             continue
 
-        starts = find_question_starts(doc)
+        starts = find_question_starts(doc, prefer_standalone=paper_code(pdf_path) == "p1")
         answer_boundary = answer_section_start_page(doc) if role == "mixed" else None
         if answer_boundary is not None:
             starts = [start for start in starts if start["pageIndex"] < answer_boundary]
@@ -765,8 +841,6 @@ def build_subject(subject_key):
             classification = classify_question(text, models, idf)
             rel_path = str(pdf_path.relative_to(ROOT))
             answer = find_answer_for_question(pdf_path, start["questionNumber"], answer_exact, answer_fallback)
-            if not answer:
-                continue
             questions.append({
                 "id": f"q{len(questions) + 1}",
                 "subject": config["label"],
@@ -784,11 +858,14 @@ def build_subject(subject_key):
                 **classification,
             })
 
+    question_count_before_dedupe = len(questions)
+    questions = dedupe_questions(questions)
     metadata = {
         "subject": config["label"],
         "sourceSyllabus": str(config["syllabus"].relative_to(ROOT)),
         "pdfCount": len(pdf_paths),
         "questionCount": len(questions),
+        "dedupedCount": question_count_before_dedupe - len(questions),
         "skippedCount": len(skipped),
     }
 
