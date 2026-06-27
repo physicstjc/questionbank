@@ -3,6 +3,8 @@ const state = {
   questions: [],
   filtered: [],
   selectedId: null,
+  selectedQuestion: null,
+  currentPdfUrl: "",
 };
 
 const topicFilter = document.querySelector("#topicFilter");
@@ -187,9 +189,9 @@ function renderList() {
           ${escapeHtml(question.topicTitle)}
         </div>
       </button>
-      <a class="answer-link${question.answerFile ? "" : " disabled"}" href="${escapeHtml(answerUrl(question) || "#")}" target="_blank" rel="noreferrer" aria-disabled="${question.answerFile ? "false" : "true"}">
+      <button class="answer-link${question.answerFile ? "" : " disabled"}" type="button" data-id="${escapeHtml(question.id)}" ${question.answerFile ? "" : "disabled"} aria-disabled="${question.answerFile ? "false" : "true"}">
         ${question.answerFile ? "Answer" : "No answer linked"}
-      </a>
+      </button>
     `;
     fragment.append(card);
   }
@@ -206,15 +208,34 @@ function renderList() {
 
 function selectQuestion(question) {
   state.selectedId = question.id;
+  state.selectedQuestion = question;
   const url = pdfUrl(question);
+  showPdf(url);
+  answerPdf.disabled = !question.answerFile;
+  answerPdf.setAttribute("aria-disabled", question.answerFile ? "false" : "true");
+  viewerTitle.textContent = `${question.fileName} · Q${question.questionNumber}`;
+  viewerSubtitle.textContent = `Question page ${question.page}, ${question.topicTitle}, LO ${question.learningOutcomeCode || "review"}`;
+  activeClass.textContent = `${question.topicTitle} · LO ${question.learningOutcomeCode || "review"}`;
+  renderList();
+}
+
+function showPdf(url) {
+  state.currentPdfUrl = url;
   pdfFrame.src = url;
   openPdf.href = url;
   openPdf.setAttribute("aria-disabled", "false");
-  const answer = answerUrl(question);
-  answerPdf.href = answer || "#";
-  answerPdf.setAttribute("aria-disabled", answer ? "false" : "true");
-  viewerTitle.textContent = `${question.fileName} · Q${question.questionNumber}`;
-  viewerSubtitle.textContent = `Page ${question.page}, ${question.topicTitle}, LO ${question.learningOutcomeCode || "review"}`;
+}
+
+function showAnswer(question) {
+  const url = answerUrl(question);
+  if (!url) return;
+  state.selectedId = question.id;
+  state.selectedQuestion = question;
+  showPdf(url);
+  answerPdf.disabled = false;
+  answerPdf.setAttribute("aria-disabled", "false");
+  viewerTitle.textContent = `${question.answerFileName || "Answer paper"} · Q${question.questionNumber}`;
+  viewerSubtitle.textContent = `Answer page ${question.answerPage || 1} for ${question.schoolName || question.fileName}`;
   activeClass.textContent = `${question.topicTitle} · LO ${question.learningOutcomeCode || "review"}`;
   renderList();
 }
@@ -268,10 +289,21 @@ function endResize(event) {
 }
 
 questionList.addEventListener("click", (event) => {
+  const answer = event.target.closest(".answer-link");
+  if (answer) {
+    const question = state.questions.find((item) => item.id === answer.dataset.id);
+    if (question) showAnswer(question);
+    return;
+  }
+
   const preview = event.target.closest(".question-preview");
   if (!preview) return;
   const question = state.questions.find((item) => item.id === preview.dataset.id);
   if (question) selectQuestion(question);
+});
+
+answerPdf.addEventListener("click", () => {
+  if (state.selectedQuestion) showAnswer(state.selectedQuestion);
 });
 
 topicFilter.addEventListener("change", () => {

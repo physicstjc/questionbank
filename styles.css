@@ -225,12 +225,15 @@ input {
   padding: 7px 10px;
   color: var(--accent-strong);
   background: #f1faf7;
+  cursor: pointer;
+  font: inherit;
   font-size: 0.82rem;
   font-weight: 800;
   text-decoration: none;
 }
 
 .answer-link.disabled,
+.answer-link:disabled,
 .answer-link[aria-disabled="true"] {
   pointer-events: none;
   border-color: #d8dee4;
@@ -327,6 +330,8 @@ input {
   padding: 9px 12px;
   color: #fff;
   background: var(--accent);
+  cursor: pointer;
+  font: inherit;
   font-weight: 800;
   text-decoration: none;
 }
@@ -338,6 +343,7 @@ input {
 }
 
 #openPdf[aria-disabled="true"],
+#answerPdf:disabled,
 #answerPdf[aria-disabled="true"] {
   pointer-events: none;
   border-color: #b9c2c8;
