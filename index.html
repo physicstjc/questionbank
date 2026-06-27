@@ -42,6 +42,17 @@
         <div id="questionList" class="question-list" aria-live="polite"></div>
       </aside>
 
+      <div
+        id="layoutResizer"
+        class="resize-handle"
+        role="separator"
+        aria-label="Resize question list and PDF preview"
+        aria-orientation="vertical"
+        aria-valuemin="300"
+        aria-valuemax="900"
+        tabindex="0"
+      ></div>
+
       <section class="viewer-pane">
         <div class="viewer-toolbar">
           <div>
@@ -50,7 +61,9 @@
           </div>
           <a id="openPdf" href="#" target="_blank" rel="noreferrer" aria-disabled="true">Open PDF</a>
         </div>
-        <iframe id="pdfFrame" title="Question PDF preview"></iframe>
+        <div class="pdf-scroll">
+          <iframe id="pdfFrame" title="Question PDF preview"></iframe>
+        </div>
       </section>
     </main>
 

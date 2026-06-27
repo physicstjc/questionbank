@@ -16,6 +16,16 @@ const pdfFrame = document.querySelector("#pdfFrame");
 const viewerTitle = document.querySelector("#viewerTitle");
 const viewerSubtitle = document.querySelector("#viewerSubtitle");
 const openPdf = document.querySelector("#openPdf");
+const appShell = document.querySelector(".app-shell");
+const layoutResizer = document.querySelector("#layoutResizer");
+
+const layoutState = {
+  pointerId: null,
+  startClientX: 0,
+  startClientY: 0,
+  startSidebarWidth: 0,
+  startSidebarHeight: 0,
+};
 
 function escapeHtml(value) {
   return String(value)
@@ -138,6 +148,54 @@ function selectQuestion(question) {
   renderList();
 }
 
+function isStackedLayout() {
+  return window.matchMedia("(max-width: 920px)").matches;
+}
+
+function setDesktopSidebarWidth(width) {
+  const minWidth = 300;
+  const maxWidth = Math.max(minWidth, window.innerWidth - 380);
+  const nextWidth = Math.min(Math.max(width, minWidth), maxWidth);
+  appShell.style.setProperty("--sidebar-width", `${Math.round(nextWidth)}px`);
+  layoutResizer.setAttribute("aria-valuenow", String(Math.round(nextWidth)));
+}
+
+function setMobileSidebarHeight(height) {
+  const minHeight = 260;
+  const maxHeight = Math.max(minHeight, window.innerHeight - 300);
+  const nextHeight = Math.min(Math.max(height, minHeight), maxHeight);
+  appShell.style.gridTemplateRows = `${Math.round(nextHeight)}px 8px minmax(320px, 1fr)`;
+  layoutResizer.setAttribute("aria-valuenow", String(Math.round(nextHeight)));
+}
+
+function beginResize(event) {
+  layoutState.pointerId = event.pointerId;
+  layoutState.startClientX = event.clientX;
+  layoutState.startClientY = event.clientY;
+  layoutState.startSidebarWidth = document.querySelector(".sidebar").getBoundingClientRect().width;
+  layoutState.startSidebarHeight = document.querySelector(".sidebar").getBoundingClientRect().height;
+  appShell.classList.add("resizing");
+  layoutResizer.setPointerCapture(event.pointerId);
+}
+
+function updateResize(event) {
+  if (layoutState.pointerId !== event.pointerId) return;
+
+  if (isStackedLayout()) {
+    setMobileSidebarHeight(layoutState.startSidebarHeight + event.clientY - layoutState.startClientY);
+    return;
+  }
+
+  setDesktopSidebarWidth(layoutState.startSidebarWidth + event.clientX - layoutState.startClientX);
+}
+
+function endResize(event) {
+  if (layoutState.pointerId !== event.pointerId) return;
+  layoutState.pointerId = null;
+  appShell.classList.remove("resizing");
+  layoutResizer.releasePointerCapture(event.pointerId);
+}
+
 questionList.addEventListener("click", (event) => {
   const card = event.target.closest(".question-card");
   if (!card) return;
@@ -151,6 +209,35 @@ topicFilter.addEventListener("change", () => {
 });
 loFilter.addEventListener("change", applyFilters);
 searchInput.addEventListener("input", applyFilters);
+layoutResizer.addEventListener("pointerdown", beginResize);
+layoutResizer.addEventListener("pointermove", updateResize);
+layoutResizer.addEventListener("pointerup", endResize);
+layoutResizer.addEventListener("pointercancel", endResize);
+layoutResizer.addEventListener("keydown", (event) => {
+  const step = event.shiftKey ? 80 : 24;
+  const sidebar = document.querySelector(".sidebar").getBoundingClientRect();
+
+  if (isStackedLayout()) {
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setMobileSidebarHeight(sidebar.height - step);
+    }
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setMobileSidebarHeight(sidebar.height + step);
+    }
+    return;
+  }
+
+  if (event.key === "ArrowLeft") {
+    event.preventDefault();
+    setDesktopSidebarWidth(sidebar.width - step);
+  }
+  if (event.key === "ArrowRight") {
+    event.preventDefault();
+    setDesktopSidebarWidth(sidebar.width + step);
+  }
+});
 
 async function init() {
   const [syllabusResponse, questionResponse] = await Promise.all([
